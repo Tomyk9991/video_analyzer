@@ -106,13 +106,44 @@ def ensure_test_img():
 
 
 def open_source(src):
-    # Zahl -> Webcam-Index, sonst Pfad/URL
+    # Zahl -> Webcam-Index, sonst Pfad/URL. Windows: mehrere Backends probieren,
+    # weil DSHOW allein oft versagt (MSMF ist auf Win10/11 meist der funktionierende).
     try:
         idx = int(src)
-        cap = cv2.VideoCapture(idx, cv2.CAP_DSHOW if sys.platform == "win32" else cv2.CAP_ANY)
     except ValueError:
-        cap = cv2.VideoCapture(src)
-    return cap
+        return cv2.VideoCapture(src)
+    if sys.platform == "win32":
+        for backend in (cv2.CAP_ANY, cv2.CAP_MSMF, cv2.CAP_DSHOW):
+            cap = cv2.VideoCapture(idx, backend)
+            if cap.isOpened():
+                return cap
+            cap.release()
+        return cv2.VideoCapture(idx)  # letzter Versuch (isOpened()==False möglich)
+    return cv2.VideoCapture(idx, cv2.CAP_ANY)
+
+
+def scan_cameras(max_idx=4):
+    """Probiert Indizes 0..max_idx (je mit Lesen eines Frames) und meldet Treffer."""
+    print(f"[scan] suche Kameras auf Indizes 0..{max_idx} ...")
+    hits = 0
+    for i in range(max_idx + 1):
+        cap = open_source(str(i))
+        if not cap.isOpened():
+            print(f"  Index {i}: keine Kamera")
+            cap.release()
+            continue
+        ok, frame = cap.read()
+        cap.release()
+        if ok and frame is not None:
+            h, w = frame.shape[:2]
+            print(f"  Index {i}: GEFUNDEN ({w}x{h}) -> --source {i} nutzen")
+            hits += 1
+        else:
+            print(f"  Index {i}: öffnet, liefert aber keine Frames (evtl. von anderer App belegt)")
+    if not hits:
+        print("[scan] nichts gefunden. Häufigste Ursachen: Kamera von Teams/Browser "
+              "belegt, oder Windows-Einstellungen -> Datenschutz -> Kamera -> "
+              "Desktop-Apps-Zugriff verweigert.")
 
 
 def run_bench(n, detector, power):
@@ -157,6 +188,10 @@ def run_stream(args):
     cap = open_source(args.source)
     if not cap.isOpened():
         print(f"[stream] FEHLER: Kamera '{args.source}' lässt sich nicht öffnen.")
+        print("  1) Andere Indizes suchen: python -m poc.main --scan")
+        print("  2) Kamera evtl. von Teams/Browser/Discord belegt -> dort schließen.")
+        print("  3) Windows: Einstellungen -> Datenschutz & Sicherheit -> Kamera ->")
+        print("     Kamerazugriff + 'Desktop-Apps auf Kamera zugreifen lassen' AN.")
         sys.exit(1)
     print(f"[stream] {args.source} -> http://<diese-IP>:{args.port}/stream.mjpg "
           f"({width}px, {fps}fps, q{quality}) | Stop: Strg+C")
@@ -196,7 +231,13 @@ def main():
     ap.add_argument("--bench", type=int, default=0, help="N Inferenzen ohne Kamera (Watt-Test)")
     ap.add_argument("--no-serve", action="store_true")
     ap.add_argument("--port", type=int, default=int(os.getenv("HTTP_PORT", "8000")))
+    ap.add_argument("--scan", action="store_true",
+                    help="Kamera-Indizes 0..4 durchprobieren und funktionierende melden")
     args = ap.parse_args()
+
+    if args.scan:
+        scan_cameras()
+        return
 
     if args.mode == "stream":
         run_stream(args)
