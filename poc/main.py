@@ -21,7 +21,7 @@ import threading
 import time
 import urllib.request
 from datetime import datetime
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler
 
 # FFmpeg-Timeout für Netz-Streams kurz halten (Default 30s blockiert jeden Retry)
 os.environ.setdefault("OPENCV_FFMPEG_CAPTURE_OPTIONS", "timeout;5000000")
@@ -92,7 +92,12 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def serve(port):
-    srv = HTTPServer(("0.0.0.0", port), Handler)
+    # Threading-Server ist Pflicht: ein einzelner /stream.mjpg-Viewer (z.B. Browser)
+    # darf /healthz, /metrics.json und weitere Viewer nicht blockieren.
+    # (Single-threaded hat genau das getan: TCP-Connect ok, aber 0 Bytes Antwort.)
+    from http.server import ThreadingHTTPServer
+    srv = ThreadingHTTPServer(("0.0.0.0", port), Handler)
+    srv.daemon_threads = True
     print(f"[http] Preview: http://localhost:{port}  Metriken: http://localhost:{port}/metrics.json")
     srv.serve_forever()
 
