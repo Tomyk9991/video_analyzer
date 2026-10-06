@@ -320,7 +320,7 @@ def main():
     csvf = open(csv_path, "w", newline="")
     w = csv.writer(csvf)
     w.writerow(["ts_iso", "person", "conf", "infer_ms", "lamp_on", "lamp_v",
-                "cpu_w", "cpu_pct", "mem_mb", "watt_real"])
+                "cpu_w", "cpu_percent", "mem_mb", "watt_real"])
 
     global latest_jpeg
     frame_i = 0
@@ -376,7 +376,7 @@ def main():
 
             w.writerow([datetime.now().isoformat(timespec="seconds"),
                         found, round(conf, 3), round(infer_ms, 1),
-                        lamp_on, round(lamp_v, 1), s["cpu_watts"], s["cpu_pct"],
+                        lamp_on, round(lamp_v, 1), s["cpu_watts"], s["cpu_percent"],
                         s["mem_mb"], s["watt_real"]])
 
             if time.time() - t_last_log >= 2.0:
@@ -385,7 +385,7 @@ def main():
                 tag = "ECHT/RAPL" if s["watt_real"] else "SCHÄTZUNG"
                 print(f"[{time.strftime('%H:%M:%S')}] Mensch={'JA' if found else 'nein'} ({conf:.2f}) | "
                       f"Infer {infer_ms:.0f}ms | Lampe={'AN' if lamp_on else 'AUS'} | "
-                      f"CPU {s['cpu_pct']}% | {s['cpu_watts']}W ({tag}) | RAM {s['mem_mb']}MB")
+                      f"CPU {s['cpu_percent']}% | {s['cpu_watts']}W ({tag}) | RAM {s['mem_mb']}MB")
     except KeyboardInterrupt:
         pass
     finally:
