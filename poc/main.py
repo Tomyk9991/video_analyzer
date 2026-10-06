@@ -17,6 +17,13 @@ import argparse
 import csv
 import os
 import sys
+
+try:
+    # .env auch bei nativem Start (ohne Docker) berücksichtigen
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
 import threading
 import time
 import urllib.request
@@ -119,7 +126,11 @@ def open_source(src):
     try:
         idx = int(src)
     except ValueError:
-        return cv2.VideoCapture(src)
+        cap = cv2.VideoCapture(src)
+        # Kein Puffer: immer das neueste Frame (wichtig bei niedrigen fps,
+        # sonst verrechnet der Analyzer alte Frames mit wachsendem Verzug)
+        cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+        return cap
     if sys.platform == "win32":
         for backend in (cv2.CAP_ANY, cv2.CAP_MSMF, cv2.CAP_DSHOW):
             cap = cv2.VideoCapture(idx, backend)
