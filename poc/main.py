@@ -79,15 +79,21 @@ class Handler(BaseHTTPRequestHandler):
             self.send_response(200)
             self.send_header("Content-Type", "multipart/x-mixed-replace; boundary=frame")
             self.end_headers()
+            # Nur NEUE Frames senden (Objekt-Identität: run_stream/main weisen pro
+            # Capture ein neues bytes-Objekt zu). Vorher wurde stur alle 0,08s gesendet
+            # (= 12,5 fps), also dasselbe Bild bis zu 4x wiederholt – der Analyzer hat
+            # die Duplikate dann alle neu durchs Netz gejagt (12 inf/s statt 3). Das war
+            # die 68 %-CPU: 54 ms x 12,5/s = 0,68 Kernlast. Passt exakt.
+            last = None
             while True:
                 try:
-                    if latest_jpeg is None:
-                        time.sleep(0.1)
+                    if latest_jpeg is None or latest_jpeg is last:
+                        time.sleep(0.05)
                         continue
+                    last = latest_jpeg
                     self.wfile.write(b"--frame\r\nContent-Type: image/jpeg\r\n\r\n")
                     self.wfile.write(latest_jpeg)
                     self.wfile.write(b"\r\n")
-                    time.sleep(0.08)
                 except Exception:
                     break
         else:
