@@ -340,6 +340,8 @@ def main():
     t_last_log = time.time()
     watts = []
     t_start = time.time()
+    frames_tick = 0
+    infs_tick = 0
 
     try:
         while True:
@@ -355,11 +357,13 @@ def main():
                 print("[main] Frame lesen fehlgeschlagen (Kamera weg / Videoende).")
                 break
             frame_i += 1
+            frames_tick += 1
 
             if frame_i % detect_every == 0 or frame_i == 1:
                 t0 = time.perf_counter()
                 found, conf, boxes = detector.infer(frame)
                 infer_ms = (time.perf_counter() - t0) * 1000
+                infs_tick += 1
 
             lamp_on, lamp_v, (rx, ry, rw, rh) = lamp.check(frame)
 
@@ -391,11 +395,18 @@ def main():
                         s["mem_mb"], s["watt_real"]])
 
             if time.time() - t_last_log >= 2.0:
-                t_last_log = time.time()
+                now = time.time()
+                dt = now - t_last_log
+                t_last_log = now
+                in_fps = frames_tick / dt
+                inf_rate = infs_tick / dt
+                frames_tick = 0
+                infs_tick = 0
                 watts.append(s["cpu_watts"])
                 tag = "ECHT/RAPL" if s["watt_real"] else "SCHÄTZUNG"
                 print(f"[{time.strftime('%H:%M:%S')}] Mensch={'JA' if found else 'nein'} ({conf:.2f}) | "
-                      f"Infer {infer_ms:.0f}ms | Lampe={'AN' if lamp_on else 'AUS'} | "
+                      f"Infer {infer_ms:.0f}ms | Stream {in_fps:.1f}fps -> {inf_rate:.1f} inf/s | "
+                      f"Lampe={'AN' if lamp_on else 'AUS'} | "
                       f"CPU {s['cpu_percent']}% | {s['cpu_watts']}W ({tag}) | RAM {s['mem_mb']}MB")
     except KeyboardInterrupt:
         pass
