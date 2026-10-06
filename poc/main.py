@@ -23,6 +23,9 @@ import urllib.request
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
+# FFmpeg-Timeout für Netz-Streams kurz halten (Default 30s blockiert jeden Retry)
+os.environ.setdefault("OPENCV_FFMPEG_CAPTURE_OPTIONS", "timeout;5000000")
+
 import cv2
 import numpy as np
 
@@ -120,6 +123,50 @@ def open_source(src):
             cap.release()
         return cv2.VideoCapture(idx)  # letzter Versuch (isOpened()==False möglich)
     return cv2.VideoCapture(idx, cv2.CAP_ANY)
+
+
+def check_tcp(host, port, timeout=3):
+    import socket
+    try:
+        with socket.create_connection((host, port), timeout=timeout):
+            return True
+    except Exception:
+        return False
+
+
+def open_with_retry(source):
+    """Öffnet lokale Quellen direkt; Netz-Streams mit Diagnose + Endlos-Retry.
+    Gibt (capture, is_url) zurück. Unterscheidet 'Host/Port dicht' (Streamer aus
+    oder Firewall) von 'Port offen, aber kein Video' (falscher Pfad/Modus)."""
+    from urllib.parse import urlparse
+    if not str(source).startswith("http"):
+        cap = open_source(source)
+        if not cap.isOpened():
+            print(f"[main] FEHLER: Quelle '{source}' lässt sich nicht öffnen.")
+            print("  Kamera suchen: python -m poc.main --scan")
+            print("  Oder ohne Kamera testen: python -m poc.main --bench 100")
+            sys.exit(1)
+        return cap, False
+    u = urlparse(str(source))
+    host, port = u.hostname, u.port or 80
+    attempt = 0
+    while True:
+        attempt += 1
+        if not check_tcp(host, port):
+            print(f"[main] Versuch {attempt}: {host}:{port} nicht erreichbar. "
+                  f"Streamer auf dem PC starten ('--mode stream') und Windows-Firewall "
+                  f"prüfen (Python für privates Netzwerk erlauben). Retry in 5s ...")
+            time.sleep(5)
+            continue
+        cap = open_source(source)
+        if cap.isOpened():
+            ok, _ = cap.read()
+            if ok:
+                return cap, True
+            cap.release()
+        print(f"[main] Versuch {attempt}: {host}:{port} antwortet, aber liefert kein "
+              f"Video unter {u.path or '/'} – läuft dort '--mode stream'? Retry in 5s ...")
+        time.sleep(5)
 
 
 def scan_cameras(max_idx=4):
@@ -259,14 +306,7 @@ def main():
     if not args.no_serve:
         threading.Thread(target=serve, args=(args.port,), daemon=True).start()
 
-    cap = open_source(args.source)
-    if not cap.isOpened():
-        print(f"[main] FEHLER: Quelle '{args.source}' lässt sich nicht öffnen.")
-        print("  Tipps: Linux -> --source /dev/video0 | Windows -> --source 0")
-        print("  Oder ohne Kamera testen: python -m poc.main --bench 100")
-        sys.exit(1)
-
-    is_url = str(args.source).startswith("http")
+    cap, is_url = open_with_retry(args.source)
     if is_url:
         print(f"[main] Netz-Quelle (Stream vom privaten PC). Bei Abbrüchen wird "
               f"automatisch neu verbunden.")
