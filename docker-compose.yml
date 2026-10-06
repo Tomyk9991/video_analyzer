@@ -1,0 +1,49 @@
+services:
+  # Läuft auf der HA-Maschine (hat KEINE Kamera): liest den Stream vom
+  # privaten PC und macht Analyse + Watt-Log + HA-Push.
+  analyzer:
+    build: .
+    container_name: video-feed-poc
+    command: ["python", "-m", "poc.main", "--mode", "analyze"]
+    ports:
+      - "${HTTP_PORT:-8000}:8000"
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      MODE: analyze
+      # HIER die Stream-URL deines privaten PCs eintragen (siehe README):
+      VIDEO_SOURCE: ${STREAM_URL:-http://192.168.178.10:8000/stream.mjpg}
+      DETECT_EVERY_N: ${DETECT_EVERY_N:-5}
+      CONF_THRES: ${CONF_THRES:-0.5}
+    volumes:
+      # Modell-Cache bleibt auf dem Host erhalten (kein Re-Download)
+      - ./models:/app/models
+    # RAPL-Wattmessung: auf vielen Systemen ohne privileged lesbar,
+    # falls nur SCHÄTZUNG erscheint, einkommentieren:
+    # volumes:
+    #   - /sys/class/powercap:/sys/class/powercap:ro
+    restart: "no"
+
+  # Läuft auf dem privaten PC (HAT die Webcam): sendet nur, rechnet nichts.
+  # Start: docker compose --profile stream up streamer
+  # (Windows einfacher nativ: python -m poc.main --mode stream --source 0)
+  streamer:
+    profiles: ["stream"]
+    build: .
+    container_name: video-streamer
+    command: ["python", "-m", "poc.main", "--mode", "stream"]
+    devices:
+      - /dev/video0:/dev/video0
+    ports:
+      - "${HTTP_PORT:-8000}:8000"
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      MODE: stream
+      VIDEO_SOURCE: ${VIDEO_SOURCE:-/dev/video0}
+      STREAM_WIDTH: ${STREAM_WIDTH:-640}
+      STREAM_FPS: ${STREAM_FPS:-10}
+      STREAM_QUALITY: ${STREAM_QUALITY:-70}
+    restart: "no"

@@ -1,0 +1,7 @@
+# PoC: Video-Feed Analyzer – Mensch-Erkennung + Strommessung
+# CPU-only, bewusst ohne torch/onnxruntime (OpenCV-DNN reicht für den PoC)
+
+opencv-python-headless==4.10.0.84
+numpy==1.26.4
+psutil==6.1.0
+requests==2.32.3

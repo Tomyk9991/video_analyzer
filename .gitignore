@@ -1,0 +1,7 @@
+/target
+__pycache__/
+*.pyc
+models/
+poc_log.csv
+.env
+.venv/
